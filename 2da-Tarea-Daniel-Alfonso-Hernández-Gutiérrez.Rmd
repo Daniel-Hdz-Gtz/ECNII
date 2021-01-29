@@ -1,0 +1,409 @@
+---
+title: |
+  | CIDE
+  | Licenciatura y Maestría en Economía
+  | ECNII
+subtitle: "Tarea 2"
+author: "Daniel Alfonso Hernandez Gutierrez"
+date: "5 de Octubre"
+output:
+   rmdformats::html_clean:
+    highlight: kate
+    thumbnails: false
+    toc: true
+    toc_depth: 5
+    toc_float:
+      collapsed: true
+      smoth_scroll: true
+---
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+---
+```{r setup, include=FALSE}
+options(scipen=999)
+library(tidyverse)
+library(reticulate)
+library(pacman)
+library(janitor)
+library(nnet)
+library(mlogit)
+library(readr)
+library(sandwich)
+library(clubSandwich)
+library(modelsummary)
+library(estimatr)
+library(knitr)
+library(rmdformats)
+library(Hmisc)
+library(haven)
+library(dplyr)
+library(foreign)
+library(lmtest)
+library(data.table)
+library(stargazer)
+library(filehash)
+library(survey)
+library(hexbin)
+library(pastecs)
+library(MASS)
+library(AER)
+library(survival)
+library(sampleSelection)
+library(COUNT)
+library(dplyr)
+library(readr)
+library(car)
+library(sandwich)
+library(VGAM)
+library(censReg)
+library(truncreg)
+Sys.setlocale("LC_ALL", "es_ES.UTF-8")
+
+p_load (tidyverse, foreign, reshape2, psych, qwraps2, forcats, readxl, 
+       broom, lmtest, margins, plm, rdrobust, multiwayvcov,
+       wesanderson, sandwich, stargazer,
+       readstata13, pscore, optmatch, kdensity, MatchIt, bootstrap, matlib, dplyr)
+
+
+
+
+setwd("C:\\Users\\danie\\OneDrive\\Documentos\\3er semestre\\Econometría  2\\2da tarea")
+
+```
+
+
+
+## Instrucciones
+  
+La tarea debe entregarse de manera individual, pero se recomienda ampliamente colaborar en grupos de estudio. Las secciones teóricas deben estar desarrolladas en un procesador de textos y enviadas en formato .docx o .pdf. Las secciones prácticas deberán contener archivos de código replicable y archivos de salida en R (o similares, en caso de usar otro software) para considerarse completas. Las tareas deben entregarse antes de la fecha límite a través de Teams. Puede crear una carpeta comprimida que contenga todos sus archivos y subir esta carpeta en Teams. Recuerde que en Teams debe asegurarse de que los archivos se han subido correctamente.
+
+ ## Pregunta 1
+
+1. Retome la base de la base *motral2012.csv* usada en la Tarea 1. Estimará un modelo Tobit para explicar los factores que afectan la oferta laboral femenina. En esta la base de datos la variable **hrsocup** registra las horas trabajadas a la semana. 
+
+a. [2 punto] ¿Qué proporción de la muestra femenina reporta horas trabajadas iguales a cero?
+```{r}
+data_Motral2012<-read.csv("motral2012.csv")
+tot_mujeres<- data_Motral2012 %>% filter(sex == 2) %>% summarise(n())
+data_Motral2012 %>% filter(sex == 2 & hrsocup == 0) %>% summarise(n()/(tot_mujeres))
+
+```
+
+Tenemos que el 35.28 % de las mujeres reporta 0 horas de trabajo
+
+a. [3 puntos] Se desea estimar el efecto de los años de educación (**anios_esc**) sobre la oferta laboral femenina controlando por el estado marital (**casada**), la edad (**eda**) y el número de hijos (**n_hij**) como una variable continua. En la base, **e_con** toma el valor de 5 para las personas casadas. Genere la variable dummy **casada** que tome el valor de 1 para las mujeres casadas y cero en otro caso. Estime un modelo de MCO para **hrsocup** mayor que cero, usando solo la población femenina. Reporte errores robustos. ¿Cuál es la interpretación sobre el coeficiente de los años de escolaridad?
+
+```{r}
+data_Motral2012_1 <- mutate(data_Motral2012, Dummy_Casada = ifelse(e_con==5, 1,0))
+ 
+"Dummy_Casada"%in% names(data_Motral2012_1)
+data_Motral_2 <- data_Motral2012_1 %>% filter(hrsocup > 0) %>%  filter(sex == 2)
+library(lmtest)
+Regresion_hrsocup<- lm(hrsocup ~ anios_esc + factor(eda) + n_hij + factor (Dummy_Casada), data_Motral_2)
+coeftest(Regresion_hrsocup, vcov = vcovHC(Regresion_hrsocup, "HC1"))
+
+```
+Tenemos que un año mas de escolaridad en las mujeres podria representar un efecto positicvo sobre las que trabajan cero horas, no obstante, con los datos obtenidos tenemos que el efecto es estadisticamente poco significativo
+
+      
+a.	[3 puntos] ¿Qué problema existe con el modelo planteado en el punto anterior en términos de la selección? ¿Considera que se trata de un caso de censura o de truncamiento?
+
+Al tener que cerca del 35% de muejres que no estan laborando, no estan siendo consideradas tenemos un problema de censura, en el cual se generan observaciones no disponibles.
+En este sentido al subreportar una parte considerable de nuestra población nuestro estimador es insesgado hacia abajo. Por ello pudiese dar lo que explicamos en el anterior inciso.
+
+a.	[8 puntos] Estime un modelo Tobit de datos censurados. ¿Qué resuelve el modelo Tobit en este caso? Interprete nuevamente el coeficiente sobre los años de escolaridad.
+En el modelo de Tobit podemos tener identificados en donde se dan los problemas, ademas que este modelo trabaja especificamente sobre los datos censurados.
+
+```{r}
+Tobit_Cen<- vglm(hrsocup ~ anios_esc + factor(eda) + n_hij + factor (Dummy_Casada), tobit(Lower = 0), data_Motral2012_1)
+
+summary(Tobit_Cen)
+
+
+```
+
+Podemos notar que se corrige la inconsistencia que se generaba en el anterior modelo (MCO), en este caso interpretamos el coeficiente como  un incremento del 0.733 horas trabajadas con cada año de estudio.
+
+
+a.	[4 puntos] ¿Cuál es el efecto marginal de un incremento de un año de educación en la oferta laboral? ¿Cómo cambia su respuesta si, en lugar de considerar la variable latente, considera la variable censurada? 
+
+```{r}
+fmar <- censReg(hrsocup ~ anios_esc + factor (Dummy_Casada) + n_hij + factor(eda), left = 0, data = filter(data_Motral2012_1, sex==2))
+#Efectos Marginales
+#)margEff( object, xValues = NULL, vcov = NULL,
+#calcVCov = TRUE, returnJacobian = FALSE, ... )
+margEff( fmar )
+summary( margEff( fmar))
+ 
+margEff(fmar)
+
+```
+Encontramos que el efecto marginal de la educación sobre las horas trabajadas es de 0.521 horas por cada año de educación
+
+## Pregunta 2
+
+Usando los mismos datos de la base *motral2012.csv* implementará un ejercicio en el mismo espíritu del famoso estudio de Mroz (1987)[^1] sobre la oferta laboral femenina. El propósito es estimar la relación entre el salario y el número de horas trabajadas, concentrándonos en la muestra de mujeres.
+
+a. [5 puntos] El primer problema al que nos enfrentamos es que el salario será no observado para las mujeres que no trabajan. Estime un modelo lineal para el log del salario por hora, **ing_x_hrs**, usando las variables **anios_esc**, **eda**, **n_hij** y **casada**, usando la submuestra de mujeres con salario por hora positivo. Use los coeficientes estimados para imputar el ingreso por hora faltante para las mujeres que reportan 0 en las horas trabajadas.
+
+```{r}
+data_Motral2012 <- read_csv("motral2012.csv")
+
+motralfem <- data_Motral2012%>%
+  filter(sex_fem==1) %>%  
+  mutate(casada = ifelse(e_con==5,1,0)) %>% 
+  mutate(trabaja = ifelse(ing_x_hrs > 0,1,0)) %>% 
+  mutate(loging = ifelse(ing_x_hrs > 0,log(ing_x_hrs),NA))
+
+
+MCOloging <- lm(loging ~ anios_esc + eda + n_hij + casada,
+                data = filter(motralfem, trabaja == 1))
+stargazer(MCOloging, type = "text")  
+
+log_ing_hrs_pre <- predict(MCOloging, motralfem)
+motralfem <- cbind(motralfem,log_ing_hrs_pre) 
+
+motralfem <- motralfem %>% 
+  mutate(logingtodas = ifelse(trabaja==1, loging, log_ing_hrs_pre)) %>% 
+  mutate(logingnotrabaja = ifelse(trabaja==0, log_ing_hrs_pre, NA)) %>% 
+  mutate(ingnotrabaja = ifelse(trabaja==0, exp( log_ing_hrs_pre) , NA)) %>%  
+  mutate(ingtodas = ifelse(trabaja==0, exp( log_ing_hrs_pre) , ing_x_hrs ))
+
+```
+  
+a. [5 puntos] Use una función[^2] para estimar por máxima verosimilitud un *heckit* para las horas trabajadas **hrsocup**. En la ecuación de selección (si la persona trabaja o no) incluya como variable explicativa el salario por hora (imputado para las mujeres que no trabajan), además de **anios_esc**, **eda**, **n_hij** y **casada**. En la ecuación de horas, incluya los mismos regresores, excepto **n_hij**.
+```{r}
+HeckmanML<-selection(trabaja ~   ingtodas + anios_esc + eda + n_hij + casada,
+                     hrsocup  ~  ingtodas + anios_esc + eda  + casada,
+                     data = motralfem, method = "ml")
+summary(HeckmanML)
+```
+
+  
+a. [10 puntos] Estime ahora el *heckit* en dos pasos, *a mano*. Es decir, siga los siguientes pasos: i) estime un probit para la ecuación de selección y obtenga el índice $x_i'\hat{\beta}$; ii) calcule el inverso de la razón de Mills $\lambda_i(x_i'\hat{\beta})$; y iii) estime por MCO la ecuación para las horas trabajadas con la submuestra que tiene horas trabajadas positivas, incluyendo como regresor el inverso de la razón de Mills estimado y el resto de los regresores.
+Compare los coeficientes y los errores estándar obtenidos en esta parte con los de la parte b. ¿Por qué son iguales o por qué difieren?
+
+```{r}
+mprobit <- glm( trabaja ~ ingtodas + anios_esc + eda + n_hij + casada, 
+                family = binomial(link = "probit"), 
+                data = motralfem) 
+stargazer(mprobit, type = "text")
+summary(mprobit$linear.predictors)
+IMR <- dnorm(mprobit$linear.predictors)/pnorm(mprobit$linear.predictors)
+mortalfem <- cbind(motralfem, IMR)
+
+etapa2 <- lm(hrsocup  ~  ingtodas + anios_esc + eda  + casada + IMR, 
+             data = motralfem, subset = (trabaja == 1))
+
+```
+
+[^1]: Mroz, T. A. (1987). [The sensitivity of an empirical model of married women's hours of work to economic and statistical assumptions](https://www.jstor.org/stable/1911029?casa_token=Uwxeul7XeBkAAAAA%3AyOzMP-SP9bdQNxw1FwyVjnEJt3w2ShyTtiinMVL6RZnpxKeehfas96e2ETxA6us20xyQG-NUF71svQugl78mx6vG2oJ2k7U39TtJn6P6dq-iTH2aDWsH&seq=1#metadata_info_tab_contents). *Econometrica*: Journal of the econometric society, 765-799. 
+[^2]: Por ejemplo, la función *heckit* del paquete *sampleSelection* en R.
+
+## Pregunta 3
+
+En esta pregunta mostrará cómo para un modelo en dos partes Poisson la log verosimilitud del problema es la suma de log verosimilitud para un proceso binario y la log verosimilitud de un proceso Poisson truncado en cero. Considere una variable aleatoria $Y$ con observaciones iid que sigue una distribución Poisson con parámetro $\lambda$ tal que
+
+$$f(y,\lambda)=P(Y=y)=\frac{\lambda^y exp(-\lambda)}{y!}$$
+
+  a. [4 puntos] Obtenga la distribución Poisson truncada en cero, definida como $P(Y=y|Y>0)$.
+  La función de verosimilitud para el caso $y=0$ es trivial, cuando $y>0$ la función está dada por
+$$L_i(\cdot) = \vect{1-\pi}\dfrac{\lambda^{y_i} \e{-\lambda}}{y_i! \vect{1-\e{-\lambda}}}$$
+Por lo que la log verosimilitud, para la observación $i$ es 
+$$\mathcal{L}_i(\cdot)= \left\lbrace 
+\begin{matrix}
+\ln\pi & \text{si} & y = 0 \\
+\ln(1- \pi) + y_i \ln \lambda_i - \ln\vect{1-\e{-\lambda_i}} - \ln y_i! -\lambda_i & \text{si} & y>0.
+\end{matrix}
+\right.$$
+  
+  a. [4 puntos] Considere además un proceso binomial que modela la probabilidad de que la variable $Y$ tome un valor cero o un valor positivo, como sigue: $$ P(Y=y)=\begin{cases} \pi \quad\quad y=0 \\ 1-\pi\quad\quad y=1,2,3,\ldots \end{cases} $$ Especialice la ecuación del modelo de dos partes vista en la [sesión 10](https://rojasirvin.github.io/ECNII2020/sesiones/s10/sesion10.html#40), usando la distribución truncada derivada en a. y el proceso binomial definido  para obtener una función de masa de probabilidad no condicional para $Y$, $g(y)$.
+  
+  $$P(Y=y)=\begin{cases} \pi \quad\quad y=0 \\ 1-\pi\quad\quad y=1,2,3,\ldots \end{cases}$$
+Especialice la ecuación del modelo de dos partes vista en la sesión 10, usando la distribución truncada derivada en a. y el proceso binomial definido para obtener una función de masa de probabilidad no condicional para $Y$, $g(y)$.
+
+Sabemos que, para un modelo en dos partes,
+$$g(y)= \left\lbrace 
+\begin{matrix}
+f_1(0) & \text{si} & y = 0 \\
+\dfrac{\vect{1-f_1(0)}f_2(y)}{1-f_2(0)} & \text{si} & y>0.
+\end{matrix}
+\right.$$
+En nuestro caso $f_1$ es la función binomial y $f_2$ es la función truncada en cero del inciso anterior. Con esto
+$$g(y)= \left\lbrace 
+\begin{matrix}
+\pi & \text{si} & y = 0 \\
+(1- \pi)\dfrac{\lambda^y \e{-\lambda}}{y! \vect{1-\e{-\lambda}}} & \text{si} & y>0.
+\end{matrix}
+\right.$$
+  
+  a. [4 puntos] Obtenga lo log verosimilitud para la $i$ésima observación. Se sugiere que continúe sus cálculos con una ecuación en dos partes.
+  Sabemos que, para un modelo en dos partes,
+
+La función de verosimilitud para el caso $y=0$ es trivial, cuando $y>0$ la función está dada por
+$$L_i(\cdot) = \vect{1-\pi}\dfrac{\lambda^{y_i} \e{-\lambda}}{y_i! \vect{1-\e{-\lambda}}}$$
+Por lo que la log verosimilitud, para la observación $i$ es 
+$$\mathcal{L}_i(\cdot)= \left\lbrace 
+\begin{matrix}
+\ln\pi & \text{si} & y = 0 \\
+\ln(1- \pi) + y_i \ln \lambda_i - \ln\vect{1-\e{-\lambda_i}} - \ln y_i! -\lambda_i & \text{si} & y>0.
+\end{matrix}
+\right.$$
+
+  
+  a. [4 puntos] En este problema, parametrizaremos $\lambda_i$ como $\lambda_i=exp(x_i'\beta_2)$, como regularmente lo hemos hecho en una regresión Poisson. Por otro lado, podemos trabajar con una parametrización general de la probabilidad $\pi$, $\pi=F(x_i'\beta_1)$. Escriba la función de log verosimilitud del problema usando la parametrización para $\pi_i$ y para $\lambda_i$ que acabamos de describir. Presente esta función en una sola parte.
+  
+  Definamos $\Omega_0 = \conj{i}{y_i = 0}$, $\Omega_1 = \conj{i}{y_i > 0}$. Note que 
+$$\Omega_0 \cup \Omega_1 = \Omega,$$
+donde $\Omega = \con{1,2, \ldots N}$.
+
+Con esto, la función de log verosimilitud del problema se ve como
+\begin{align*}
+\mathcal{L} (\cdot) & = \sum_{\Omega}\mathcal{L}(\cdot)  \\
+	& = \sum_{\Omega_0}\mathcal{L}(\cdot) + \sum_{\Omega_1}\mathcal{L}(\cdot) \\
+	& = \sum_{i \in \Omega_0} \ln \pi_i + \sum_{i \in \Omega_1}\left[ \ln(1- \pi) + y_i \ln \lambda_i - \ln\vect{1-\e{-\lambda_i}} - \ln y_i! -\lambda_i \right].
+\end{align*}
+
+En vista de que $\pi_i = F(\x{1})$ y $\lambda_i = \e{\x{2}}$ tenemos
+\begin{align*}
+\mathcal{L}  = &  \sum_{\Omega_0} \ln F(\x{1}) + \sum_{ \Omega_1} \ln(1- F(\x{1})) \\
+	& + \sum_{ \Omega_1} \left[y_i \ln \e{\x{2}} - \ln\vect{1-\e{-\e{\x{2}}}} - \ln y_i! -\e{\x{2}} \right].
+\end{align*}
+
+  a. [4 puntos] Agrupe los términos para mostrar que $\mathcal{L}=\mathcal{L}_1(\beta_1)+\mathcal{L}_2(\beta_2)$. Así, mostrará que la log verosimilitud del problema se puede descomponer en una log verosimilitud para el modelo binario y otra para el conteo truncado en cero. Por tanto, no perdemos información si estimamos los parámetros de la probabilidad binomial por un lado, y los de la distribución Poisson truncada en cero, por el otro.
+
+Note que 
+$$\mathcal{L}_1(\beta_1) := \sum_{\Omega_0} \ln F(\x{1}) + \sum_{ \Omega_1} \ln(1- F(\x{1}))$$
+es la función de log verosimilitud para una distribución binomial.
+
+Por otro lado, de la distribución truncada \eqref{truncada} tiene por función de verosimilitud 
+$$L(\cdot) = \prod_{\Omega_1} \dfrac{\lambda_i^{y_i} \e{-\lambda_i}}{y_i! \vect{1-\e{-\lambda_i}}},$$
+por lo que, la función de log verosimilitud tiene la forma
+$$\mathcal{L}(\cdot) = \sum_{\Omega_1}\left[ y_i \ln \lambda_i - \ln\vect{1-\e{-\lambda_i}} - \ln y_i! -\lambda_i \right].$$
+En términos de nuestro problema, se define
+$$\mathcal{L}_2(\beta_2) := \sum_{ \Omega_1} \left[y_i \ln \e{\x{2}} - \ln\vect{1-\e{-\e{\x{2}}}} - \ln y_i! -\e{\x{2}} \right].$$
+De todo lo anterior, la función $\mathcal{L}$ del inciso anterior puede verse como 
+$$\mathcal{L}=\mathcal{L}_1(\beta_1)+\mathcal{L}_2(\beta_2),$$
+es decir, la log verosimilitud del problema se puede descomponer en una log verosimilitud para el modelo binario y otra para el conteo truncado en cero.
+
+## Pregunta 4
+
+Partiendo de la variable aleatoria $Y$ con observaciones iid que sigue una distribución Poisson con parámetro $\lambda$ usada en el problema anterior, en este problema caracterizará la estimación de un modelo Poisson inflado en cero.
+
+f(y,\lambda)=P(Y=y)=\frac{\lambda^y exp(-\lambda)}{y!}
+
+  a. [4 puntos] Especialice la expresión vista en la [sesión 10](https://rojasirvin.github.io/ECNII2020/sesiones/s10/sesion10.html#42) para obtener la función de masa de probabilidad del modelo Poisson inflado en cero $g(y|\lambda, \pi)$.
+  Sabemos que la expresión vista en la sesión 10 es,
+
+$$g(y)=
+\begin{cases}
+f_1(0)(1-f_1(0))f_2(0) \quad\text{si }y=0 \\
+(1-f_1(0))f_2(y) \qquad \quad \text{si } y \geq1 \\
+\end{cases}$$
+
+De igual forma conocemos que $f_1(0) = \pi$ y que $f_2(\cdot)$ es una Poisson con parámetro $\lambda$ tal que
+
+$$f_2(y,\lambda)=P(Y=y)=\frac{\lambda^y e^{-\lambda}}{y!}$$
+Entonces, la densidad del modelo de Poisson inflado en cero es:
+
+$$g(y|\lambda, \pi)=
+\begin{cases}
+\pi + (1-\pi) e^{-\lambda} \quad\text{si } y=0 \\
+(1-\pi)\frac{\lambda^y e^{-\lambda}}{y!} \qquad\text{si } y\geq 1 \\
+\end{cases}$$
+
+  
+  a. [4 puntos] Provea una expresión para la función de verosimilitud $L(\lambda,\pi)=\prod_{i=1}^N g(y_i|\lambda, \pi)$. Una sugerencia para simplificar sus cálculos es definir una variable $X$ igual al numero de veces que $Y_i$ que toma el valor de cero.
+  Definamos $X$ igual al número de veces que $Y_i$ que toma el valor de cero.
+
+
+$$L(\lambda,\pi)=\prod_{i=1}^N g(y_i|\lambda, \pi) = \left(\pi+(1-\pi) e^{-\lambda}\right)^{X} \prod_{i=1 \atop Y_{i} \neq 0}^{N}(1-\pi) e^{-\lambda} \frac{\lambda^{Y_{i}}}{Y_{i} !}$$
+
+  a. [6 puntos] Provea una expresión para la log verosimilitud del problema, $\mathcal{L}(\lambda,\pi)$.
+  al tomar el logaritmo de la función de verosimilitud,
+
+$$\begin{aligned}
+\mathcal{L}(\lambda,\pi) = &  ln \left ( \prod_{i=1}^N g(y_i|\lambda, \pi) \right ) \\
+= &  X ln \left(\pi+(1-\pi) e^{-\lambda}\right)+(N-X) \ln (1-\pi)-(N-X) \lambda + \sum_{Y_{i} \neq 0} Y_i ln {\lambda } + ln \left ( \prod_{ Y_{i} \neq 0}(Y_i!)^{-1} \right )
+\end{aligned}$$
+  
+  a. [6 puntos] Obtenga las condiciones de primer orden que caracterizan la solución del problema de máxima verosimilitud, derivando la log verosimilitud con respecto a $\lambda$ y a $\pi$.
+  
+$$\frac{d \mathcal{L}(\cdot)}{d\lambda}  =\frac{-X(1-\pi) e^{-\lambda}}{\pi+(1-\pi) e^{-\lambda}}- (N-X) + \frac{1}{\lambda} \sum_{Y_{i} \neq 0} Y_i = 0 $$
+$$\Longrightarrow \qquad \frac{1}{\lambda}\sum_{Y_{i} \neq 0} Y_i = \frac{X(1-\pi) e^{-\lambda}}{\pi+(1-\pi) e^{-\lambda}}+N-X $$
+
+$$\frac{d \mathcal{L}(\cdot)}{d\pi}  = \frac{X\left(1-e^{-\lambda}\right)}{\pi+(1-\pi) e^{-\lambda}} - \frac{N-X}{(1-\pi)} = 0$$
+$$\Longrightarrow \qquad N-X = \frac{X\left(1-e^{-\lambda}\right) (1-\pi) }{\pi+(1-\pi) e^{-\lambda}}$$
+
+## Pregunta 5
+
+Uno de los debates más activos en economía es el relativo a la relación entre años de educación e ingreso. La base de datos *ingresos_iv.dta* contiene una muestra de hombres de entre 24 y 36 años de edad.
+
+a.	[2 puntos] Estime una regresión por MCO para explicar el logaritmo del salario (**lwage**) en función de la educación **educ** y los siguientes controles: **exper**, **expersq**, **black**, **south**, **smsa**, **reg661**, **reg662**, **reg663**, **reg664**, **reg665**, **reg666**, **reg667**, **reg668** y **smsa66**. ¿Qué problema encuentra en la estimación de esta relación? ¿El coeficiente sobre **educ** tiene una interpretación causal del efecto de la educación en el salario?
+#cargar base de datos
+
+```{r}
+
+
+db<-read.csv("ingresos_iv.csv")
+str(db)
+
+mco<-lm(lwage~ educ +exper+ expersq+ black+ south+ smsa+ reg661+ reg662+ reg663+ reg664+ reg665+ reg666+ reg667+ reg668 + smsa66, data=db)
+coeftest(mco,vcov. =  vcovHC(mco, type = "HC1"))
+
+```
+
+Dado que existe una relación entre educación y habilidad suponemos que esta es una variable endogena, la cual esta correlacionada con el salario.
+Sabemos que la covarianza de la educacion con el termino del error no es cero, es por ello que los coeficientes estiamdos estan sesgados y por ende son inconsistentes.
+
+a. [2 puntos] Se propone usar una variable dicotómica que indica si el individuo vivía cerca de una universidad cuando tenía cuatro años, como instrumento de los años de educación. ¿Qué condiciones debe cumplir la variable propuesta para funcionar como instrumento válido?
+
+para poder proponer un instrumento se debe cumplir que alla una correlación parcial con nuestra variable endogena, es decir, esta debe ser predictora de la misma.
+además debe cumplir con el supuesto de exogeneidad, la cual no debe estar relacionada con nuetro termino de error
+
+a. [2 puntos] ¿Cómo juzga la propuesta de usar la variable antes descrita como instrumento?
+E   l vivir cerca de un colegio, puede considerarse como un buen predictor para la cantidad de años destinados a la educación.
+Respecto a la exogeneidad debemos considerar que si bien para un gran numero de personas la decisión puede ser de forma aleatoria, esta esta fuertemente asociada al nivel socioeconomico, educación y contactos de los familiares.
+Es decir, vivir cerca del colegio se relaciona con un numeoro indefinido de variables que pueden estar afectando el salario de una persona en su adultez.
+
+
+a. [4 puntos] Estime la relación entre el logaritmo del salario y la educación usando la variable dicotómica de acceso a una universidad (**nearc4**) como instrumento. Emplee las mismas variables de control que en el modelo de MCO.
+```{r}
+istr<-ivreg(lwage~ educ +exper+ expersq+ black+ south+ smsa+ reg661+ reg662+ reg663+ reg664+ reg665+ reg666+ reg667+ reg668 + smsa66| nearc4 +exper+ expersq+ black+ south+ smsa+ reg661+ reg662+ reg663+ reg664+ reg665+ reg666+ reg667+ reg668 + smsa66, data=db)
+summary(istr)
+istr2<-coeftest(istr, vcov. =  vcovHC(istr, type = "HC1"))
+```
+
+
+a. [2 puntos] Interprete la primera etapa en términos del coeficiente sobre el instrumento y la magnitud y significancia del estadístico $F$.
+```{r}
+red<-lm(educ~ nearc4 +exper+ expersq+ black+ south+ smsa+ reg661+ reg662+ reg663+ reg664+ reg665+ reg666+ reg667+ reg668 + smsa66, data=db)
+coeftest(red,vcov. =  vcovHC(red, type = "HC1"))
+summary(red)
+
+```
+En nuestra forma reducida tenemos que que el coeficiente asociado a nuestro instrumento es estadiscticamente significativo al 1% y presenta un signo que hace sentido con el analisis.
+Tenemos que vivir cerca de un colegio a los 4 años tiene un impacto positivo en la cantidad final de años estudiados, en alrededor de 0.32 años
+
+
+
+a. [2 puntos] Interprete el coeficiente sobre la variable de educación en la segunda etapa. Compare la magnitud del efecto estimado con el resultado de MCO
+
+Nuestro coeficiente asociado a educación es de 0.1315. Lo cual nos indica que un año mas de educación aumneta el salrio en 13.15%.Esta correción al problema de endogeneidad por VI nos da un efecto mayor al calculado por MCO
+
+a. [4 puntos] Realice ahora el siguiente procedimiento. Primero, estime la primera etapa usando una regresión por MCO. Obtenga los valores ajustados de educación y llámelos **educ_hat**. Luego, estime la segunda etapa empleando **educ_hat** como variable independiente, además del resto de variables de control. ¿Cómo cambian sus resultados en comparación con la parte d.?
+educ_hat<-fitted(red)
+ivmanita<-lm(lwage~ educ_hat +exper+ expersq+ black+ south+ smsa+ reg661+ reg662+ reg663+ reg664+ reg665+ reg666+ reg667+ reg668 + smsa66, data=db)
+manita2<-coeftest(ivmanita,vcov. =  vcovHC(ivmanita, type = "HC1"))
+
+stargazer(ivmanita,istr,manita2,istr2, type="text")
+Los valores son similares a excepción del error estandar. Pudiese ser que haya una sobre estimación de los errores 
+
+
+a. [2 puntos] ¿A qué se deben las discrepancias que encuentra? ¿Cuál de las dos estrategias prefiere para estimar el modelo de variables instrumentales?
+La sobreestimación de los errores se da alo incluir en ambas etapas los erroes, es decir , estamos agregando peso al calculo de los mismos en la forma indirecta de hacerlo
